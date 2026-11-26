@@ -10,7 +10,7 @@ import os
 import re
 import tomllib
 
-KNOB_ACTIONS = {"volume", "microphone", "app_volume", "none"}
+KNOB_ACTIONS = {"volume", "microphone", "app_volume", "obs_volume", "none"}
 BUTTON_ACTIONS = {"play_pause", "next", "previous", "stop", "mute", "mute_microphone", "volume_up",
                   "volume_down", "command", "none"}
 
@@ -81,6 +81,9 @@ def validate(cfg):
                     problems.append(f"[{section}.\"{key}\"] apps is not a valid pattern: {error}")
                 if not entry.get("apps"):
                     problems.append(f"[{section}.\"{key}\"] app_volume needs apps = \"name|other\"")
+            if entry["action"] == "obs_volume" and not (isinstance(entry.get("source"), str)
+                                                        and entry["source"].strip()):
+                problems.append(f"[{section}.\"{key}\"] obs_volume needs source = \"name of the OBS audio source\"")
             if entry["action"] == "command" and not (isinstance(entry.get("run"), list) and entry["run"]
                                                      and all(isinstance(a, str) for a in entry["run"])):
                 problems.append(f"[{section}.\"{key}\"] command needs run = [\"program\", \"arg\", ...]")

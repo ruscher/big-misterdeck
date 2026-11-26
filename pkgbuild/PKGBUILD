@@ -1,0 +1,65 @@
+# Maintainer: Rafael Ruscher <rruscher@gmail.com>
+# shellcheck shell=bash disable=SC2034,SC2154
+
+pkgname=big-misterdeck
+# Must match bigmisterdeck/__init__.py: check() refuses a package that disagrees.
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="MisteRdeck (Pro Micro MIDI stream deck) as volume knobs, media buttons and OBS Studio controls"
+arch=('any')
+url="https://github.com/ruscher/big-misterdeck"
+license=('GPL-3.0-or-later')
+# Standard library only (tomllib: Python 3.11). The rest are programs it runs:
+# aseqdump reads the deck through the ALSA sequencer, pactl sets the volume
+# (wpctl is the fallback when pactl is missing).
+depends=(
+	'python>=3.11'
+	'alsa-utils'
+	'libpulse'
+	'systemd'
+)
+makedepends=('git')
+checkdepends=('python-pytest')
+optdepends=(
+	'playerctl: media buttons (play/pause, previous, next, stop)'
+	'obs-studio: knobs on the volume of OBS audio sources (OBS 28+, WebSocket server on)'
+	'obs-cmd: buttons that switch OBS scenes, record or stream (AUR)'
+	'wireplumber: wpctl, volume without pactl'
+)
+install="${pkgname}.install"
+# Built from main. To package another copy of the code (a branch, or a local
+# checkout already tested), name it in MISTERDECK_SOURCE, e.g.
+#   MISTERDECK_SOURCE="git+file://$PWD/..#branch=feat/x" makepkg
+source=("${pkgname}::${MISTERDECK_SOURCE:-git+${url}.git#branch=main}")
+sha256sums=('SKIP')
+
+check() {
+	cd "${pkgname}"
+	local version
+	version=$(python -c 'import bigmisterdeck; print(bigmisterdeck.__version__)')
+	if [ "${version}" != "${pkgver}" ]; then
+		printf 'pkgver %s but bigmisterdeck/__init__.py says %s\n' "${pkgver}" "${version}" >&2
+		return 1
+	fi
+	python -m pytest -q -p no:cacheprovider
+}
+
+package() {
+	cd "${pkgname}"
+	local appdir=/usr/share/${pkgname}
+
+	# The launcher finds the package in /usr/share/big-misterdeck (a copy the
+	# user installed with install.sh, in ~/.local/share, comes first).
+	install -d "${pkgdir}${appdir}"
+	cp -r --no-preserve=ownership bigmisterdeck "${pkgdir}${appdir}/"
+	find "${pkgdir}${appdir}" -name __pycache__ -prune -exec rm -rf {} +
+	python -m compileall -q -d "${appdir}" "${pkgdir}${appdir}"
+	install -Dm755 big-misterdeck "${pkgdir}/usr/bin/${pkgname}"
+
+	# The same user service as install.sh, started from /usr/bin instead of ~/.local/bin.
+	install -d "${pkgdir}/usr/lib/systemd/user"
+	sed 's|^ExecStart=.*|ExecStart=/usr/bin/big-misterdeck|' data/big-misterdeck.service \
+		> "${pkgdir}/usr/lib/systemd/user/${pkgname}.service"
+
+	install -Dm644 README.md README.en.md CHANGELOG.md -t "${pkgdir}/usr/share/doc/${pkgname}/"
+}

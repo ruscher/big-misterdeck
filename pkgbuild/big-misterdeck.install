@@ -1,0 +1,14 @@
+post_install() {
+	cat <<'EOF'
+==> Big MisteRdeck: start it for your user (no root):
+      systemctl --user enable --now big-misterdeck
+    Then: big-misterdeck --check
+EOF
+}
+
+post_upgrade() {
+	cat <<'EOF'
+==> Big MisteRdeck: apply the new version with
+      systemctl --user restart big-misterdeck
+EOF
+}

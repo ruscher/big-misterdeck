@@ -18,6 +18,20 @@ big-misterdeck --listen                    # what each control sends
 big-misterdeck --write-config              # commented ~/.config/big-misterdeck/config.toml
 ```
 
+**OBS Studio**: a knob can set the volume of an OBS audio source over obs-websocket
+(OBS 28+; turn on *Tools → WebSocket Server Settings*), on the same scale as the
+mixer slider. The port and password come from OBS's own settings, or from
+`OBS_WEBSOCKET_URL=obsws://host:4455/password`:
+
+```toml
+[knobs.18]
+action = "obs_volume"
+source = "Mic/Aux"
+```
+
+Buttons can drive OBS with [obs-cmd](https://github.com/grigio/obs-cmd):
+`run = ["obs-cmd", "scene", "switch", "Camera"]`.
+
 Needs Python 3.11+, alsa-utils (`aseqdump`), `pactl` or `wpctl`, and `playerctl`.
 The deck is read through the ALSA sequencer, so OBS or a DAW keep receiving it at
 the same time. A knob sweep (~90 events) is applied at most 25 times per second
