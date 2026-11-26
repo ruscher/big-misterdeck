@@ -1,5 +1,5 @@
 """What knobs and buttons do: PipeWire/PulseAudio volume (``pactl``, ``wpctl`` as
-fallback), MPRIS media (``playerctl``) and user commands.
+fallback), MPRIS media (``playerctl``), OBS sources (:mod:`.obs`) and user commands.
 
 Every external call goes through ``run`` (injectable for tests), with an argument
 list (never a shell) and a timeout.
@@ -162,7 +162,7 @@ def press(button, audio, behaviour, spawn=None):
     return action
 
 
-def turn(knob, percent, audio):
+def turn(knob, percent, audio, obs=None):
     action = knob.get("action", "none")
     if action == "volume":
         audio.set_volume(percent)
@@ -170,4 +170,6 @@ def turn(knob, percent, audio):
         audio.set_volume(percent, source=True)
     elif action == "app_volume":
         audio.set_app_volume(knob["apps"], percent)
+    elif action == "obs_volume" and obs is not None:
+        obs.set_volume(knob["source"], percent)
     return action

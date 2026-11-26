@@ -2,3 +2,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
+# makepkg in pkgbuild/
+pkgbuild/src/
+pkgbuild/pkg/
+pkgbuild/big-misterdeck/
+pkgbuild/*.pkg.tar*
+pkgbuild/*.log

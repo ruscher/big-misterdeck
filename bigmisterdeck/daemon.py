@@ -13,6 +13,7 @@ import threading
 import time
 
 from . import actions, config, midi
+from . import obs as obs_ws
 
 log = logging.getLogger("big-misterdeck")
 
@@ -20,9 +21,10 @@ log = logging.getLogger("big-misterdeck")
 class Deck:
     """Turns MIDI events into actions (no I/O of its own: testable without a device)."""
 
-    def __init__(self, cfg, audio, clock=time.monotonic):
+    def __init__(self, cfg, audio, clock=time.monotonic, obs=None):
         self.cfg = cfg
         self.audio = audio
+        self.obs = obs
         self.clock = clock
         behaviour = cfg.get("behaviour", {})
         self.interval = 1.0 / int(behaviour.get("rate_hz", 25))
@@ -38,7 +40,9 @@ class Deck:
             if button:
                 log.info("button %s: %s", event.number, actions.press(button, self.audio, self.cfg["behaviour"]))
         elif event.kind == midi.CONTROL and event.number in self.cfg["knobs"]:
-            self.pending[event.number] = actions.knob_percent(event.value, self.max_volume, self.invert)
+            # an OBS fader has its own scale: the knob's whole travel is the slider's whole travel
+            top = 100 if self.cfg["knobs"][event.number]["action"] == "obs_volume" else self.max_volume
+            self.pending[event.number] = actions.knob_percent(event.value, top, self.invert)
             self.flush()
 
     def flush(self):
@@ -54,7 +58,7 @@ class Deck:
             if self.applied.get(number) == percent:
                 continue
             knob = self.cfg["knobs"][number]
-            actions.turn(knob, percent, self.audio)
+            actions.turn(knob, percent, self.audio, self.obs)
             self.applied[number], self.last_at[number] = percent, now
             log.debug("knob %s: %s %s%%", number, knob["action"], percent)
         return wait
@@ -88,11 +92,21 @@ def follow(stream, deck, stop):
     deck.flush()
 
 
-def run(cfg=None, audio=None, stop=None, find=midi.find_port, open_stream=midi.open_stream, retry=2.0):
+def run(cfg=None, audio=None, stop=None, find=midi.find_port, open_stream=midi.open_stream, retry=2.0,
+        obs=None):
     cfg = cfg or config.load()
     audio = audio or actions.Audio()
     stop = stop or threading.Event()
-    deck = Deck(cfg, audio)
+    obs = obs or obs_ws.Client()        # connects only when a knob first needs OBS
+    deck = Deck(cfg, audio, obs=obs)
+    try:
+        _serve(cfg, deck, stop, find, open_stream, retry)
+    finally:
+        obs.close()
+    return 0
+
+
+def _serve(cfg, deck, stop, find, open_stream, retry):
     waiting_logged = False
     while not stop.is_set():
         port = find(cfg["device"]["match"])
@@ -118,4 +132,3 @@ def run(cfg=None, audio=None, stop=None, find=midi.find_port, open_stream=midi.o
         if not stop.is_set():
             log.info("deck disconnected")
             stop.wait(retry)
-    return 0

@@ -18,8 +18,11 @@ rate_hz = 25       # mudanças de volume por segundo, no máximo, por potenciôm
 invert = false     # potenciômetros ligados ao contrário
 
 # ---- Potenciômetros ---------------------------------------------------------
-# action: volume | microphone | app_volume | none
+# action: volume | microphone | app_volume | obs_volume | none
 # app_volume: apps = nomes dos programas (expressão regular), ex. "spotify|vlc"
+# obs_volume: source = nome exato de uma fonte de áudio do OBS, ex. "Mic/Aux".
+#   Precisa do OBS aberto com Ferramentas → Configurações do servidor WebSocket →
+#   Ativar. A senha vem das configurações do OBS (ou de OBS_WEBSOCKET_URL).
 
 [knobs.16]
 action = "volume"
@@ -56,9 +59,10 @@ action = "mute"
 action = "mute_microphone"
 
 # Exemplos para os botões 6 a 12:
+# OBS: precisa do obs-cmd (yay -S obs-cmd) e de OBS_WEBSOCKET_URL no serviço (veja o README)
 # [buttons.6]
 # action = "command"
-# run = ["obs", "--startstreaming"]
+# run = ["obs-cmd", "recording", "toggle"]
 #
 # [buttons.7]
 # action = "command"

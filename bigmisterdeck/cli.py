@@ -8,7 +8,7 @@ import shutil
 import sys
 import threading
 
-from . import __version__, actions, config, daemon, midi
+from . import __version__, actions, config, daemon, midi, obs
 
 EXAMPLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.example.toml")
 
@@ -57,7 +57,34 @@ def cmd_check(cfg):
     print(f"{'OK ' if port else '!! '} deck       {('MIDI port ' + port) if port else 'not found'}")
     print(f"OK  config     {config.path() if os.path.exists(config.path()) else 'built-in defaults'}: "
           f"{len(cfg['knobs'])} knobs, {len(cfg['buttons'])} buttons")
+    ok &= check_obs(cfg)
     return 0 if ok and port else 1
+
+
+def check_obs(cfg, client=None):
+    """Only when a knob uses OBS: is OBS reachable, and does every source exist?"""
+    sources = sorted({knob["source"] for knob in cfg["knobs"].values() if knob["action"] == "obs_volume"})
+    if not sources:
+        return True
+    client = client or obs.Client(retry=0)
+    try:
+        host, port, _ = client.endpoint()
+    except ValueError as error:
+        print(f"!!  obs        {error}")
+        return False
+    if not client.connected():
+        print(f"!!  obs        not reachable on {host}:{port} - open OBS and turn on "
+              "Tools > WebSocket Server Settings > Enable")
+        return False
+    print(f"OK  obs        {host}:{port}")
+    ok = True
+    for source in sources:
+        found = client.request("GetInputVolume", {"inputName": source}) is not None
+        missing = "" if found else " not found (obs-cmd input list)"
+        print(f"{'OK ' if found else '!! '} obs source {source!r}{missing}")
+        ok &= found
+    client.close()
+    return ok
 
 
 def main(argv=None):
