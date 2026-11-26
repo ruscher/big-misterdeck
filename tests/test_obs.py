@@ -16,8 +16,10 @@ from bigmisterdeck import actions, cli, config, daemon, midi, obs
 
 # --- a fake OBS ----------------------------------------------------------------------------
 class FakeObs:
-    def __init__(self, password="s3cret", sources=("Mic Principal",), scenes=("Camera", "Screen"), ping=False):
+    def __init__(self, password="s3cret", sources=("Mic Principal",), scenes=("Camera", "Screen"), ping=False,
+                 hang_up=0):
         self.password = password
+        self.hang_up = hang_up          # this many requests are received and then the line goes dead
         self.sources = set(sources)
         self.scenes = list(scenes)
         self.ping = ping
@@ -86,6 +88,9 @@ class FakeObs:
                     continue
                 d = json.loads(payload)["d"]
                 self.requests.append((d["requestType"], d["requestData"]))
+                if self.hang_up:
+                    self.hang_up -= 1
+                    return                       # OBS got it, then crashed before answering
                 if self.ping:
                     self.send(sock, b"hi", opcode=0x9)
                 data, answer = d["requestData"], {}
@@ -339,7 +344,7 @@ def test_a_button_tries_obs_at_once_even_inside_the_knob_retry_delay():
     CLIENTS.append(client)
     assert not client.set_volume("Mic Principal", 50)          # OBS closed: the knobs wait 3 s
     state["open"] = True                                        # the user opens OBS and presses a button
-    assert client.press("obs_record", {"action": "obs_record"})
+    assert client.press("obs_record", {"action": "obs_record"}) == obs.DONE
     assert fake.requests == [("ToggleRecord", {})]
 
 
@@ -360,7 +365,7 @@ def test_deck_sends_obs_buttons_to_the_client(caplog):
 
         def press(self, action, button):
             self.calls.append(action)
-            return True
+            return obs.DONE
 
     cfg = config.validate(config._merge(config.DEFAULTS, {"buttons": {"6": {"action": "obs_record"}}}))
     pressed = Pressed()
@@ -380,3 +385,37 @@ def test_check_reports_scenes_and_mute_sources(capsys):
     out = capsys.readouterr().out
     assert "OK  obs scene  'Camera'" in out and "!!  obs scene  'Typo' not found" in out
     assert "OK  obs source 'Mic Principal'" in out
+
+
+def test_a_toggle_is_never_sent_twice_when_obs_does_not_answer(caplog):
+    fake = FakeObs(hang_up=1)
+    client = client_for(fake)
+    with caplog.at_level(logging.WARNING, "big-misterdeck"):
+        done = actions.press({"action": "obs_stream"}, None, {}, obs=client)
+    assert fake.requests == [("ToggleStream", {})]                  # not repeated: no live-then-off
+    assert "did not answer" in done and "may or may not have happened" in caplog.text
+
+
+def test_a_volume_is_sent_again_when_obs_does_not_answer():
+    fake = FakeObs(hang_up=1)
+    client = client_for(fake)
+    assert client.set_volume("Mic Principal", 50)                   # harmless to repeat
+    assert [kind for kind, _ in fake.requests] == ["SetInputVolume", "SetInputVolume"]
+
+
+def test_a_toggle_after_obs_restarted_goes_out_once_on_a_fresh_connection():
+    fake = FakeObs()
+    client = client_for(fake)
+    assert client.set_volume("Mic Principal", 50)
+    fake.drop_all()                                                 # OBS quit and came back
+    assert client.press("obs_record", {"action": "obs_record"}) == obs.DONE
+    assert [kind for kind, _ in fake.requests] == ["SetInputVolume", "ToggleRecord"]
+    assert len(fake.server_ends) == 2
+
+
+def test_every_failed_press_says_why(caplog):
+    client = client_for(FakeObs())
+    with caplog.at_level(logging.WARNING, "big-misterdeck"):
+        for _ in range(3):
+            assert client.press("obs_scene", {"action": "obs_scene", "scene": "Typo"}) == obs.FAILED
+    assert len([r for r in caplog.records if "Typo" in r.getMessage()]) == 3

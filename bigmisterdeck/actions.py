@@ -147,9 +147,10 @@ def press(button, audio, behaviour, spawn=None, obs=None):
     if action in obs_ws.BUTTONS:
         target = button.get("scene") or button.get("source")
         label = f"{action} {target!r}" if target else action
-        if obs is None or not obs.press(action, button):
-            return f"{label} failed"            # the OBS client has logged why
-        return label
+        outcome = obs.press(action, button) if obs is not None else obs_ws.FAILED
+        if outcome == obs_ws.UNSURE:
+            return f"{label}: OBS did not answer, look at OBS to see whether it happened"
+        return label if outcome == obs_ws.DONE else f"{label} failed"   # the OBS client has logged why
     if action in MEDIA:
         audio.media(MEDIA[action])
     elif action == "mute":

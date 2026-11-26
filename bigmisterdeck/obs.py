@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import select
 import socket
 import struct
 import time
@@ -36,6 +37,13 @@ BUTTONS = {
     "obs_virtual_camera": ("ToggleVirtualCam", None, None),
     "obs_replay_save": ("SaveReplayBuffer", None, None),
 }
+
+# Requests that must never run twice: if the connection drops after one was sent,
+# OBS may already have done it, so it is reported as unsure instead of repeated
+# (a repeated ToggleStream would go live and straight off air again).
+NOT_REPEATABLE = {"ToggleRecord", "ToggleRecordPause", "ToggleStream", "ToggleVirtualCam", "ToggleInputMute",
+                  "SaveReplayBuffer"}
+DONE, FAILED, UNSURE = "done", "failed", "unsure"
 
 # OBS's own mixer fader curve (libobs/obs-audio-controls.c, log fader), so the
 # knob and the slider on screen sit at the same position for the same volume.
@@ -105,6 +113,7 @@ class Client:
         self._buf = b""
         self._next_try = 0.0
         self._seq = 0
+        self._sent = False
         self._down_reported = False
         self._warned = set()
 
@@ -120,36 +129,48 @@ class Client:
         return self.request("SetInputVolume", data) is not None
 
     def press(self, action, button):
-        """Run a button action from :data:`BUTTONS` with the button's settings."""
+        """Run a button action from :data:`BUTTONS`: DONE, FAILED or UNSURE (OBS did not answer)."""
         kind, key, field = BUTTONS[action]
-        # a press is one deliberate act: try to connect now, even inside the knobs' retry delay
-        return self.request(kind, {field: button[key]} if key else None, force=True) is not None
+        return self._call(kind, {field: button[key]} if key else None, deliberate=True)[0]
 
-    def request(self, kind, data=None, force=False):
+    def request(self, kind, data=None):
         """Send one request; its responseData ({} when empty), or None when it failed."""
+        outcome, answer = self._call(kind, data)
+        return answer if outcome == DONE else None
+
+    def _call(self, kind, data, deliberate=False):
+        """(DONE | FAILED | UNSURE, responseData).
+
+        ``deliberate`` (a button press, one act): connect now even inside the knobs'
+        retry delay, and log the reason of every failure, not only the first.
+        """
         for attempt in range(2):
-            if not self._ensure(force):
-                return None
+            if not self._ensure(force=deliberate):
+                return FAILED, None
+            self._sent = False
             try:
                 answer = self._exchange(kind, data)
                 break
             except (OSError, ValueError) as error:
                 self._drop(f"connection to OBS lost: {error}")
+                if self._sent and kind in NOT_REPEATABLE:
+                    log.warning("OBS did not answer %s: it may or may not have happened, look at OBS", kind)
+                    return UNSURE, None
                 if attempt == 0:
-                    self._next_try = 0.0    # a stale connection (OBS restarted): reconnect once, right away
+                    self._next_try = 0.0    # reconnect once, right away, and send it again
         else:
-            return None
+            return FAILED, None
         status = answer.get("requestStatus", {})
         name = (data or {}).get("inputName") or (data or {}).get("sceneName")
         problem = (kind, name, status.get("comment") or status.get("code"))
         if not status.get("result"):
-            if problem not in self._warned:        # a knob turn repeats it ~25 times a second
+            if deliberate or problem not in self._warned:    # a knob turn repeats it ~25 times a second
                 self._warned.add(problem)
                 log.warning("OBS %s %s: %s", kind, problem[1] or "", problem[2])
-            return None
+            return FAILED, None
         # this request works again: warn again if it breaks later; other sources keep their silence
         self._warned = {seen for seen in self._warned if seen[:2] != problem[:2]}
-        return answer.get("responseData") or {}
+        return DONE, answer.get("responseData") or {}
 
     def connected(self):
         return self._ensure()
@@ -162,6 +183,7 @@ class Client:
         self._seq += 1
         request_id = str(self._seq)
         self._send({"op": 6, "d": {"requestType": kind, "requestId": request_id, "requestData": data or {}}})
+        self._sent = True
         while True:
             message = self._recv()
             if message.get("op") == 7 and message.get("d", {}).get("requestId") == request_id:
@@ -177,6 +199,11 @@ class Client:
 
     # --- connection --------------------------------------------------------------------
     def _ensure(self, force=False):
+        if self._sock and self._closed_by_obs():
+            # OBS quit or restarted since the last request: reconnect before sending anything,
+            # so even a toggle that must not be repeated goes out on a live connection
+            self._drop("connection to OBS lost: OBS closed it")
+            self._next_try = 0.0
         if self._sock:
             return True
         if not force and self.clock() < self._next_try:
@@ -200,6 +227,14 @@ class Client:
         log.info("connected to OBS on %s:%s", host, port)
         self._down_reported = False
         return True
+
+    def _closed_by_obs(self):
+        """True when the peer has closed the connection (end of stream waiting, nothing sent yet)."""
+        try:
+            ready, _, _ = select.select([self._sock], [], [], 0)
+            return bool(ready) and self._sock.recv(1, socket.MSG_PEEK) == b""
+        except (OSError, ValueError):
+            return True
 
     def _drop(self, why):
         if self._sock:
