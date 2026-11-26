@@ -27,10 +27,13 @@ optdepends=(
 	'wireplumber: wpctl, volume without pactl'
 )
 install="${pkgname}.install"
-# Built from main. To package another copy of the code (a branch, or a local
-# checkout already tested), name it in MISTERDECK_SOURCE, e.g.
+# Built from the release tag v${pkgver}, so a package is always one fixed
+# version. A release: bump pkgver here and in bigmisterdeck/__init__.py, merge,
+# then tag that commit v<version> and push the tag. To package another copy of
+# the code (a branch, or a local checkout already tested), name it in
+# MISTERDECK_SOURCE, e.g.
 #   MISTERDECK_SOURCE="git+file://$PWD/..#branch=feat/x" makepkg
-source=("${pkgname}::${MISTERDECK_SOURCE:-git+${url}.git#branch=main}")
+source=("${pkgname}::${MISTERDECK_SOURCE:-git+${url}.git#tag=v${pkgver}}")
 sha256sums=('SKIP')
 
 check() {
