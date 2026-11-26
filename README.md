@@ -76,7 +76,7 @@ action = "volume_up"
 
 | Potenciômetros | Botões |
 | --- | --- |
-| `volume`, `microphone`, `app_volume` (com `apps`), `obs_volume` (com `source`), `none` | `play_pause`, `next`, `previous`, `stop`, `mute`, `mute_microphone`, `volume_up`, `volume_down`, `command` (com `run`), `none` |
+| `volume`, `microphone`, `app_volume` (com `apps`), `obs_volume` (com `source`), `none` | `play_pause`, `next`, `previous`, `stop`, `mute`, `mute_microphone`, `volume_up`, `volume_down`, `command` (com `run`), as ações do [OBS](#obs-studio), `none` |
 
 Comandos rodam sem shell (`run` é uma lista), então nada do que chega do deck vira
 um comando inventado.
@@ -84,66 +84,58 @@ um comando inventado.
 ## OBS Studio
 
 Primeiro ligue o servidor do OBS: *Ferramentas → Configurações do servidor
-WebSocket → Ativar servidor WebSocket*.
+WebSocket → Ativar servidor WebSocket*. Não precisa de mais nada: com o OBS neste
+computador, o Big MisteRdeck lê a porta e a senha nas configurações do próprio OBS.
 
-**Potenciômetros** regulam o volume de uma fonte de áudio do OBS, na mesma escala do
-controle deslizante do mixer (o potenciômetro e o controle na tela ficam na mesma
-posição):
+**Potenciômetros** regulam o volume de uma fonte de áudio, na mesma escala do
+controle do mixer (o potenciômetro e o controle na tela ficam na mesma posição).
+**Botões** trocam de cena, gravam, transmitem e mutam fontes:
 
 ```toml
 [knobs.18]
 action = "obs_volume"
 source = "Mic/Aux"           # o nome exato da fonte no mixer do OBS
+
+[buttons.6]
+action = "obs_record"        # grava / para
+
+[buttons.7]
+action = "obs_mute"
+source = "Mic/Aux"           # muta / desmuta a fonte só no OBS
+
+[buttons.8]
+action = "obs_scene"
+scene = "Câmera"             # o nome exato da cena
 ```
 
-Com o OBS neste computador, os potenciômetros não precisam de configuração de
-conexão: o Big MisteRdeck lê a porta e a senha nas configurações do próprio OBS. Com
-o OBS fechado, os outros controles continuam funcionando e ele se conecta sozinho
-quando o OBS abrir. `big-misterdeck --check` confere a conexão e o nome de cada fonte.
+| Ação | O que faz |
+| --- | --- |
+| `obs_volume` (potenciômetro, com `source`) | volume de uma fonte de áudio |
+| `obs_scene` (com `scene`) | troca para a cena |
+| `obs_mute` (com `source`) | muta / desmuta uma fonte de áudio |
+| `obs_record` · `obs_record_pause` | grava / para · pausa / continua a gravação |
+| `obs_stream` | começa / para a transmissão (um toque já entra ao vivo) |
+| `obs_virtual_camera` | liga / desliga a câmera virtual |
+| `obs_replay_save` | salva o replay buffer (que precisa estar ligado) |
 
-**Botões** controlam o OBS com o [obs-cmd](https://github.com/grigio/obs-cmd)
-(no Arch/BigLinux/Manjaro: `yay -S obs-cmd`). Diferente dos potenciômetros, o
-`obs-cmd` **não** lê as configurações do OBS: sem `OBS_WEBSOCKET_URL` ele tenta a
-senha `secret`. Passe o endereço e a senha ao serviço (a senha aparece em *Mostrar
-informações de conexão*, na mesma janela do OBS):
+`big-misterdeck --check` confere a conexão e o nome de cada cena e fonte. Com o OBS
+fechado, os outros controles continuam funcionando: os potenciômetros esperam o OBS
+abrir, e um botão do OBS tenta conectar na hora em que é apertado.
 
-```bash
-systemctl --user edit big-misterdeck
-```
+**OBS em outro computador** (ou senha diferente da salva no OBS): passe o endereço
+ao serviço com `systemctl --user edit big-misterdeck`,
 
 ```ini
 [Service]
-Environment=OBS_WEBSOCKET_URL=obsws://localhost:4455/SUA_SENHA
+Environment=OBS_WEBSOCKET_URL=obsws://192.168.0.10:4455/SUA_SENHA
 ```
 
-```bash
-systemctl --user restart big-misterdeck
-```
+e depois `systemctl --user restart big-misterdeck`. No terminal, para o `--check`,
+use `export OBS_WEBSOCKET_URL=...` antes.
 
-Os potenciômetros também usam essa variável quando ela existe, então ela é o jeito de
-apontar tudo para um OBS em outro computador (`obsws://192.168.0.10:4455/SUA_SENHA`).
-
-Depois, os botões:
-
-```toml
-[buttons.6]
-action = "command"
-run = ["obs-cmd", "recording", "toggle"]
-
-[buttons.7]
-action = "command"
-run = ["obs-cmd", "scene", "switch", "Câmera"]
-```
-
-`obs-cmd scene list` e `obs-cmd input list` mostram os nomes das cenas e das fontes.
-A variável do serviço não chega ao terminal: para esses comandos, e para o `--check`
-com um OBS em outro computador, defina-a também na linha de comando:
-
-```bash
-export OBS_WEBSOCKET_URL=obsws://localhost:4455/SUA_SENHA
-obs-cmd scene list
-big-misterdeck --check
-```
+Para algo que essas ações não cobrem, um botão `command` pode rodar o
+[obs-cmd](https://github.com/grigio/obs-cmd), que também lê `OBS_WEBSOCKET_URL`
+(sem ela, ele tenta a senha `secret`).
 
 ## Como funciona
 

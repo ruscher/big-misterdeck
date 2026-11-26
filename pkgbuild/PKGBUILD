@@ -3,7 +3,7 @@
 
 pkgname=big-misterdeck
 # Must match bigmisterdeck/__init__.py: check() refuses a package that disagrees.
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="MisteRdeck (Pro Micro MIDI stream deck) as volume knobs, media buttons and OBS Studio controls"
 arch=('any')
@@ -22,8 +22,8 @@ makedepends=('git')
 checkdepends=('python-pytest')
 optdepends=(
 	'playerctl: media buttons (play/pause, previous, next, stop)'
-	'obs-studio: knobs on the volume of OBS audio sources (OBS 28+, WebSocket server on)'
-	'obs-cmd: buttons that switch OBS scenes, record or stream (AUR)'
+	'obs-studio: knobs on OBS source volumes, buttons for scenes, recording, streaming (OBS 28+, WebSocket server on)'
+	'obs-cmd: other OBS commands from a command button (AUR)'
 	'wireplumber: wpctl, volume without pactl'
 )
 install="${pkgname}.install"

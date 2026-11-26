@@ -23,6 +23,7 @@ invert = false     # potenciômetros ligados ao contrário
 # obs_volume: source = nome exato de uma fonte de áudio do OBS, ex. "Mic/Aux".
 #   Precisa do OBS aberto com Ferramentas → Configurações do servidor WebSocket →
 #   Ativar. A senha vem das configurações do OBS (ou de OBS_WEBSOCKET_URL).
+#   Veja também as ações de botão do OBS, mais abaixo.
 
 [knobs.16]
 action = "volume"
@@ -41,6 +42,9 @@ apps = "firefox|chrom|brave|vivaldi|opera"
 # ---- Botões -----------------------------------------------------------------
 # action: play_pause | next | previous | stop | mute | mute_microphone |
 #         volume_up | volume_down | command | none
+# OBS:    obs_scene (scene = "nome da cena") | obs_mute (source = "fonte") |
+#         obs_record | obs_record_pause | obs_stream | obs_virtual_camera |
+#         obs_replay_save   (obs_stream entra ao vivo com um toque)
 # command: run = ["programa", "argumento", ...]  (sem shell)
 
 [buttons.1]
@@ -59,10 +63,8 @@ action = "mute"
 action = "mute_microphone"
 
 # Exemplos para os botões 6 a 12:
-# OBS: precisa do obs-cmd (yay -S obs-cmd) e de OBS_WEBSOCKET_URL no serviço (veja o README)
 # [buttons.6]
-# action = "command"
-# run = ["obs-cmd", "recording", "toggle"]
+# action = "obs_record"
 #
 # [buttons.7]
 # action = "command"
@@ -73,3 +75,7 @@ action = "mute_microphone"
 #
 # [buttons.9]
 # action = "volume_up"
+#
+# [buttons.12]
+# action = "obs_scene"
+# scene = "Câmera"
