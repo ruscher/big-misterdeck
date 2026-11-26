@@ -57,3 +57,13 @@ def test_the_shipped_example_is_valid():
 def test_errors_are_explained(tmp_path, text, message):
     with pytest.raises(config.ConfigError, match=message.replace("[", r"\[").replace("(", r"\(")):
         config.load(write(tmp_path, text))
+
+
+def test_the_commented_button_examples_are_valid_when_uncommented():
+    import pathlib
+    import tomllib
+    text = (pathlib.Path(config.__file__).parent / "config.example.toml").read_text(encoding="utf-8")
+    examples = text[text.index("# Exemplos para os botões"):].splitlines()[1:]
+    user = tomllib.loads("\n".join(line[2:] if line.startswith("# ") else "" for line in examples))
+    cfg = config.validate(config._merge(config.DEFAULTS, user))
+    assert {6, 7, 8, 9, 12} <= set(cfg["buttons"])

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0] — 2026-11-26
+
+- Botões controlam o OBS direto, pela mesma conexão dos potenciômetros, sem
+  obs-cmd e sem repetir a senha: `obs_scene` (`scene = "..."`), `obs_mute`
+  (`source = "..."`), `obs_record`, `obs_record_pause`, `obs_stream`,
+  `obs_virtual_camera` e `obs_replay_save`.
+- Um botão do OBS tenta conectar na hora em que é apertado, mesmo logo depois de
+  o OBS abrir.
+- `--check` confere também o nome de cada cena.
+
 ## [0.2.0] — 2026-11-26
 
 - Potenciômetros podem regular o volume de uma fonte de áudio do OBS Studio

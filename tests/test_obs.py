@@ -16,9 +16,10 @@ from bigmisterdeck import actions, cli, config, daemon, midi, obs
 
 # --- a fake OBS ----------------------------------------------------------------------------
 class FakeObs:
-    def __init__(self, password="s3cret", sources=("Mic Principal",), ping=False):
+    def __init__(self, password="s3cret", sources=("Mic Principal",), scenes=("Camera", "Screen"), ping=False):
         self.password = password
         self.sources = set(sources)
+        self.scenes = list(scenes)
         self.ping = ping
         self.requests = []
         self.identified = threading.Event()
@@ -87,10 +88,19 @@ class FakeObs:
                 self.requests.append((d["requestType"], d["requestData"]))
                 if self.ping:
                     self.send(sock, b"hi", opcode=0x9)
-                found = d["requestData"].get("inputName", "Mic Principal") in self.sources
-                self.send(sock, {"op": 7, "d": {"requestType": d["requestType"], "requestId": d["requestId"],
-                                                "requestStatus": {"result": found, "code": 100 if found else 600,
-                                                                  **({} if found else {"comment": "No source"})}}})
+                data, answer = d["requestData"], {}
+                if d["requestType"] == "GetSceneList":
+                    found, answer = True, {"scenes": [{"sceneName": name} for name in self.scenes]}
+                elif "sceneName" in data:
+                    found = data["sceneName"] in self.scenes
+                else:
+                    found = data.get("inputName", "Mic Principal") in self.sources
+                reply = {"requestType": d["requestType"], "requestId": d["requestId"],
+                         "requestStatus": {"result": found, "code": 100 if found else 600,
+                                           **({} if found else {"comment": "No source"})}}
+                if answer:
+                    reply["responseData"] = answer
+                self.send(sock, {"op": 7, "d": reply})
         except (ConnectionError, OSError):
             pass
         finally:
@@ -291,3 +301,82 @@ def test_check_reports_obs_and_missing_sources(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "OK  obs source 'Mic Principal'" in out and "!!  obs source 'Typo' not found" in out
     assert cli.check_obs(config.load("/nonexistent"))           # no OBS knob: nothing to check
+
+
+# --- buttons ------------------------------------------------------------------------------------
+@pytest.mark.parametrize("button, sent", [
+    ({"action": "obs_scene", "scene": "Camera"}, ("SetCurrentProgramScene", {"sceneName": "Camera"})),
+    ({"action": "obs_mute", "source": "Mic Principal"}, ("ToggleInputMute", {"inputName": "Mic Principal"})),
+    ({"action": "obs_record"}, ("ToggleRecord", {})),
+    ({"action": "obs_record_pause"}, ("ToggleRecordPause", {})),
+    ({"action": "obs_stream"}, ("ToggleStream", {})),
+    ({"action": "obs_virtual_camera"}, ("ToggleVirtualCam", {})),
+    ({"action": "obs_replay_save"}, ("SaveReplayBuffer", {})),
+])
+def test_obs_buttons_send_their_request(button, sent):
+    fake = FakeObs()
+    client = client_for(fake)
+    done = actions.press(button, audio=None, behaviour={}, obs=client)
+    assert fake.requests == [sent]
+    assert done == button["action"] + (f" {(button.get('scene') or button.get('source'))!r}"
+                                       if len(button) > 1 else "")
+
+
+def test_a_misnamed_scene_is_reported_in_the_log_line():
+    client = client_for(FakeObs())
+    assert actions.press({"action": "obs_scene", "scene": "Typo"}, None, {}, obs=client) == "obs_scene 'Typo' failed"
+
+
+def test_a_button_tries_obs_at_once_even_inside_the_knob_retry_delay():
+    clock, fake, state = Clock(), FakeObs(), {"open": False}
+
+    def connect(where, timeout):
+        if not state["open"]:
+            raise ConnectionRefusedError(111, "Connection refused")
+        return fake.connect(where, timeout)
+
+    client = obs.Client(where=("localhost", 4455, "s3cret"), connect=connect, clock=clock, retry=3)
+    CLIENTS.append(client)
+    assert not client.set_volume("Mic Principal", 50)          # OBS closed: the knobs wait 3 s
+    state["open"] = True                                        # the user opens OBS and presses a button
+    assert client.press("obs_record", {"action": "obs_record"})
+    assert fake.requests == [("ToggleRecord", {})]
+
+
+def test_obs_buttons_need_their_name(tmp_path):
+    file = tmp_path / "config.toml"
+    file.write_text('[buttons.8]\naction = "obs_scene"\n[buttons.9]\naction = "obs_mute"\nsource = " "\n')
+    with pytest.raises(config.ConfigError) as error:
+        config.load(str(file))
+    assert "obs_scene needs scene" in str(error.value) and "obs_mute needs source" in str(error.value)
+    file.write_text('[buttons.8]\naction = "obs_scene"\nscene = "Camera"\n[buttons.9]\naction = "obs_stream"\n')
+    assert config.load(str(file))["buttons"][8] == {"action": "obs_scene", "scene": "Camera"}
+
+
+def test_deck_sends_obs_buttons_to_the_client(caplog):
+    class Pressed:
+        def __init__(self):
+            self.calls = []
+
+        def press(self, action, button):
+            self.calls.append(action)
+            return True
+
+    cfg = config.validate(config._merge(config.DEFAULTS, {"buttons": {"6": {"action": "obs_record"}}}))
+    pressed = Pressed()
+    deck = daemon.Deck(cfg, audio=None, clock=Clock(), obs=pressed)
+    with caplog.at_level(logging.INFO, "big-misterdeck"):
+        deck.handle(midi.Event(midi.NOTE_ON, 0, 6, 127))
+    assert pressed.calls == ["obs_record"] and "button 6: obs_record" in caplog.text
+
+
+def test_check_reports_scenes_and_mute_sources(capsys):
+    cfg = config.validate(config._merge(config.DEFAULTS, {"buttons": {
+        "8": {"action": "obs_scene", "scene": "Camera"},
+        "9": {"action": "obs_scene", "scene": "Typo"},
+        "10": {"action": "obs_mute", "source": "Mic Principal"},
+    }}))
+    assert not cli.check_obs(cfg, client_for(FakeObs()))
+    out = capsys.readouterr().out
+    assert "OK  obs scene  'Camera'" in out and "!!  obs scene  'Typo' not found" in out
+    assert "OK  obs source 'Mic Principal'" in out

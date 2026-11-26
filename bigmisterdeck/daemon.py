@@ -38,7 +38,8 @@ class Deck:
         if event.kind == midi.NOTE_ON:
             button = self.cfg["buttons"].get(event.number)
             if button:
-                log.info("button %s: %s", event.number, actions.press(button, self.audio, self.cfg["behaviour"]))
+                done = actions.press(button, self.audio, self.cfg["behaviour"], obs=self.obs)
+                log.info("button %s: %s", event.number, done)
         elif event.kind == midi.CONTROL and event.number in self.cfg["knobs"]:
             # an OBS fader has its own scale: the knob's whole travel is the slider's whole travel
             top = 100 if self.cfg["knobs"][event.number]["action"] == "obs_volume" else self.max_volume

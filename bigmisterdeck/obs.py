@@ -1,4 +1,4 @@
-"""OBS Studio over obs-websocket 5 (built into OBS 28+): the volume of OBS audio sources.
+"""OBS Studio over obs-websocket 5 (built into OBS 28+): source volumes, scenes, recording.
 
 Standard library only: a minimal WebSocket client (RFC 6455) that keeps one
 connection open, so each knob step costs one small message instead of a new
@@ -25,6 +25,17 @@ log = logging.getLogger("big-misterdeck")
 OBS_SETTINGS = "~/.config/obs-studio/plugin_config/obs-websocket/config.json"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 AUTH_FAILED = 4009                  # obs-websocket close code
+
+# Button actions: action -> (request type, config key, request field); no key = no argument.
+BUTTONS = {
+    "obs_scene": ("SetCurrentProgramScene", "scene", "sceneName"),
+    "obs_mute": ("ToggleInputMute", "source", "inputName"),
+    "obs_record": ("ToggleRecord", None, None),
+    "obs_record_pause": ("ToggleRecordPause", None, None),
+    "obs_stream": ("ToggleStream", None, None),
+    "obs_virtual_camera": ("ToggleVirtualCam", None, None),
+    "obs_replay_save": ("SaveReplayBuffer", None, None),
+}
 
 # OBS's own mixer fader curve (libobs/obs-audio-controls.c, log fader), so the
 # knob and the slider on screen sit at the same position for the same volume.
@@ -108,10 +119,16 @@ class Client:
             data["inputVolumeDb"] = round(db, 2)
         return self.request("SetInputVolume", data) is not None
 
-    def request(self, kind, data=None):
+    def press(self, action, button):
+        """Run a button action from :data:`BUTTONS` with the button's settings."""
+        kind, key, field = BUTTONS[action]
+        # a press is one deliberate act: try to connect now, even inside the knobs' retry delay
+        return self.request(kind, {field: button[key]} if key else None, force=True) is not None
+
+    def request(self, kind, data=None, force=False):
         """Send one request; its responseData ({} when empty), or None when it failed."""
         for attempt in range(2):
-            if not self._ensure():
+            if not self._ensure(force):
                 return None
             try:
                 answer = self._exchange(kind, data)
@@ -123,7 +140,8 @@ class Client:
         else:
             return None
         status = answer.get("requestStatus", {})
-        problem = (kind, (data or {}).get("inputName"), status.get("comment") or status.get("code"))
+        name = (data or {}).get("inputName") or (data or {}).get("sceneName")
+        problem = (kind, name, status.get("comment") or status.get("code"))
         if not status.get("result"):
             if problem not in self._warned:        # a knob turn repeats it ~25 times a second
                 self._warned.add(problem)
@@ -158,10 +176,10 @@ class Client:
         self._drop(None)
 
     # --- connection --------------------------------------------------------------------
-    def _ensure(self):
+    def _ensure(self, force=False):
         if self._sock:
             return True
-        if self.clock() < self._next_try:
+        if not force and self.clock() < self._next_try:
             return False
         try:
             host, port, password = self.endpoint()

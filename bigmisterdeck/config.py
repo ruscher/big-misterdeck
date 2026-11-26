@@ -10,9 +10,14 @@ import os
 import re
 import tomllib
 
+from .obs import BUTTONS as OBS_BUTTONS
+
 KNOB_ACTIONS = {"volume", "microphone", "app_volume", "obs_volume", "none"}
 BUTTON_ACTIONS = {"play_pause", "next", "previous", "stop", "mute", "mute_microphone", "volume_up",
-                  "volume_down", "command", "none"}
+                  "volume_down", "command", "none", *OBS_BUTTONS}
+# OBS actions and the setting each one needs: the name of a source or scene in OBS
+NAMED = {"obs_volume": ("source", "audio source"), "obs_mute": ("source", "audio source"),
+         "obs_scene": ("scene", "scene")}
 
 DEFAULTS = {
     "device": {"match": "MisteRdeck|Arduino Leonardo|Arduino Micro|Pro Micro"},
@@ -81,9 +86,11 @@ def validate(cfg):
                     problems.append(f"[{section}.\"{key}\"] apps is not a valid pattern: {error}")
                 if not entry.get("apps"):
                     problems.append(f"[{section}.\"{key}\"] app_volume needs apps = \"name|other\"")
-            if entry["action"] == "obs_volume" and not (isinstance(entry.get("source"), str)
-                                                        and entry["source"].strip()):
-                problems.append(f"[{section}.\"{key}\"] obs_volume needs source = \"name of the OBS audio source\"")
+            if entry["action"] in NAMED:
+                field, what = NAMED[entry["action"]]
+                if not (isinstance(entry.get(field), str) and entry[field].strip()):
+                    problems.append(f"[{section}.\"{key}\"] {entry['action']} needs {field} = "
+                                    f"\"name of the OBS {what}\"")
             if entry["action"] == "command" and not (isinstance(entry.get("run"), list) and entry["run"]
                                                      and all(isinstance(a, str) for a in entry["run"])):
                 problems.append(f"[{section}.\"{key}\"] command needs run = [\"program\", \"arg\", ...]")

@@ -62,10 +62,12 @@ def cmd_check(cfg):
 
 
 def check_obs(cfg, client=None):
-    """Only when a knob uses OBS: is OBS reachable, and does every source exist?"""
-    sources = sorted({knob["source"] for knob in cfg["knobs"].values() if knob["action"] == "obs_volume"})
-    if not sources:
+    """Only when a control uses OBS: is OBS reachable, and does every source and scene exist?"""
+    controls = [*cfg["knobs"].values(), *cfg["buttons"].values()]
+    if not any(entry["action"].startswith("obs_") for entry in controls):
         return True
+    sources = sorted({entry["source"] for entry in controls if entry["action"] in ("obs_volume", "obs_mute")})
+    scenes = sorted({entry["scene"] for entry in controls if entry["action"] == "obs_scene"})
     client = client or obs.Client(retry=0)
     try:
         host, port, _ = client.endpoint()
@@ -80,9 +82,17 @@ def check_obs(cfg, client=None):
     ok = True
     for source in sources:
         found = client.request("GetInputVolume", {"inputName": source}) is not None
-        missing = "" if found else " not found (obs-cmd input list)"
+        missing = "" if found else " not found (see the names in OBS's Audio Mixer)"
         print(f"{'OK ' if found else '!! '} obs source {source!r}{missing}")
         ok &= found
+    if scenes:
+        listing = client.request("GetSceneList") or {}
+        existing = {scene.get("sceneName") for scene in listing.get("scenes", [])}
+        for scene in scenes:
+            found = scene in existing
+            missing = "" if found else " not found (see the names in OBS's Scenes list)"
+            print(f"{'OK ' if found else '!! '} obs scene  {scene!r}{missing}")
+            ok &= found
     client.close()
     return ok
 

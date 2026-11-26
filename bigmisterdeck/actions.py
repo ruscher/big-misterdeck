@@ -14,6 +14,8 @@ import subprocess
 import threading
 import time
 
+from . import obs as obs_ws
+
 log = logging.getLogger("big-misterdeck")
 SINK, SOURCE = "@DEFAULT_SINK@", "@DEFAULT_SOURCE@"
 
@@ -139,9 +141,15 @@ def _spawn(argv):
     threading.Thread(target=wait, daemon=True).start()
 
 
-def press(button, audio, behaviour, spawn=None):
+def press(button, audio, behaviour, spawn=None, obs=None):
     """Run a button's action; returns a short description for the log."""
     action = button.get("action", "none")
+    if action in obs_ws.BUTTONS:
+        target = button.get("scene") or button.get("source")
+        label = f"{action} {target!r}" if target else action
+        if obs is None or not obs.press(action, button):
+            return f"{label} failed"            # the OBS client has logged why
+        return label
     if action in MEDIA:
         audio.media(MEDIA[action])
     elif action == "mute":
