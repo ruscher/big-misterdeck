@@ -96,14 +96,34 @@ action = "obs_volume"
 source = "Mic/Aux"           # o nome exato da fonte no mixer do OBS
 ```
 
-O Big MisteRdeck pega a porta e a senha nas configurações do próprio OBS; para um OBS
-em outro computador, defina `OBS_WEBSOCKET_URL=obsws://host:4455/senha` no serviço
-(`systemctl --user edit big-misterdeck`). Com o OBS fechado, os outros controles
-continuam funcionando e ele se conecta sozinho quando o OBS abrir.
-`big-misterdeck --check` confere a conexão e o nome de cada fonte.
+Com o OBS neste computador, os potenciômetros não precisam de configuração de
+conexão: o Big MisteRdeck lê a porta e a senha nas configurações do próprio OBS. Com
+o OBS fechado, os outros controles continuam funcionando e ele se conecta sozinho
+quando o OBS abrir. `big-misterdeck --check` confere a conexão e o nome de cada fonte.
 
 **Botões** controlam o OBS com o [obs-cmd](https://github.com/grigio/obs-cmd)
-(no Arch/BigLinux/Manjaro: `yay -S obs-cmd`), que lê a mesma `OBS_WEBSOCKET_URL`:
+(no Arch/BigLinux/Manjaro: `yay -S obs-cmd`). Diferente dos potenciômetros, o
+`obs-cmd` **não** lê as configurações do OBS: sem `OBS_WEBSOCKET_URL` ele tenta a
+senha `secret`. Passe o endereço e a senha ao serviço (a senha aparece em *Mostrar
+informações de conexão*, na mesma janela do OBS):
+
+```bash
+systemctl --user edit big-misterdeck
+```
+
+```ini
+[Service]
+Environment=OBS_WEBSOCKET_URL=obsws://localhost:4455/SUA_SENHA
+```
+
+```bash
+systemctl --user restart big-misterdeck
+```
+
+Os potenciômetros também usam essa variável quando ela existe, então ela é o jeito de
+apontar tudo para um OBS em outro computador (`obsws://192.168.0.10:4455/SUA_SENHA`).
+
+Depois, os botões:
 
 ```toml
 [buttons.6]
@@ -116,6 +136,14 @@ run = ["obs-cmd", "scene", "switch", "Câmera"]
 ```
 
 `obs-cmd scene list` e `obs-cmd input list` mostram os nomes das cenas e das fontes.
+A variável do serviço não chega ao terminal: para esses comandos, e para o `--check`
+com um OBS em outro computador, defina-a também na linha de comando:
+
+```bash
+export OBS_WEBSOCKET_URL=obsws://localhost:4455/SUA_SENHA
+obs-cmd scene list
+big-misterdeck --check
+```
 
 ## Como funciona
 

@@ -183,6 +183,31 @@ def test_unknown_source_is_warned_once_not_on_every_step(caplog):
     assert client.set_volume("Mic Principal", 10)       # the connection survived the errors
 
 
+def test_two_knobs_one_good_one_misnamed_still_warn_once(caplog):
+    client = client_for(FakeObs())
+    with caplog.at_level(logging.WARNING, "big-misterdeck"):
+        for percent in range(10):                       # both knobs turned together
+            assert client.set_volume("Mic Principal", percent)
+            assert not client.set_volume("Nope", percent)
+    assert len([r for r in caplog.records if "Nope" in r.getMessage()]) == 1
+
+
+def test_malformed_url_is_reported_not_raised(caplog, monkeypatch, capsys):
+    monkeypatch.setenv("OBS_WEBSOCKET_URL", "obsws://localhost:port/secret")
+    with pytest.raises(ValueError, match="OBS_WEBSOCKET_URL"):
+        obs.address()
+    client = obs.Client(connect=FakeObs().connect, clock=Clock())
+    CLIENTS.append(client)
+    with caplog.at_level(logging.WARNING, "big-misterdeck"):
+        assert not client.set_volume("Mic Principal", 50)   # the daemon goes on
+        assert not client.set_volume("Mic Principal", 60)
+    assert caplog.text.count("OBS_WEBSOCKET_URL") == 1
+    cfg = config.validate(config._merge(config.DEFAULTS, {"knobs": {"18": {"action": "obs_volume",
+                                                                           "source": "Mic Principal"}}}))
+    assert not cli.check_obs(cfg, client)
+    assert "!!  obs        OBS_WEBSOCKET_URL" in capsys.readouterr().out
+
+
 def test_wrong_password_is_reported_and_retried_later(caplog):
     clock = Clock()
     fake = FakeObs(password="right")

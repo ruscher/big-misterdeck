@@ -67,7 +67,11 @@ def check_obs(cfg, client=None):
     if not sources:
         return True
     client = client or obs.Client(retry=0)
-    host, port, _ = client.where or obs.address()
+    try:
+        host, port, _ = client.endpoint()
+    except ValueError as error:
+        print(f"!!  obs        {error}")
+        return False
     if not client.connected():
         print(f"!!  obs        not reachable on {host}:{port} - open OBS and turn on "
               "Tools > WebSocket Server Settings > Enable")

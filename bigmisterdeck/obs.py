@@ -44,7 +44,7 @@ def slider_db(percent):
 
 
 def address(env=None, settings=OBS_SETTINGS):
-    """(host, port, password) for OBS's WebSocket server."""
+    """(host, port, password) for OBS's WebSocket server; ValueError for a malformed OBS_WEBSOCKET_URL."""
     env = os.environ if env is None else env
     saved = {}
     try:
@@ -52,16 +52,26 @@ def address(env=None, settings=OBS_SETTINGS):
             saved = json.load(handle)
     except (OSError, ValueError):
         pass
+    if not isinstance(saved, dict):
+        saved = {}
     saved_password = saved.get("server_password") if saved.get("auth_required", True) else None
     url = env.get("OBS_WEBSOCKET_URL")
     if url:
-        parts = urllib.parse.urlsplit(url)
+        try:
+            parts = urllib.parse.urlsplit(url)
+            port = parts.port or 4455
+        except ValueError as error:
+            raise ValueError(f"OBS_WEBSOCKET_URL is not obsws://host:port/password: {error}") from None
         host = parts.hostname or "localhost"
         password = urllib.parse.unquote(parts.path.lstrip("/")) or None
         if password is None and host in ("localhost", "127.0.0.1", "::1"):
             password = saved_password
-        return host, parts.port or 4455, password
-    return "localhost", int(saved.get("server_port") or 4455), saved_password
+        return host, port, password
+    try:
+        port = int(saved.get("server_port") or 4455)
+    except (TypeError, ValueError):
+        port = 4455
+    return "localhost", port, saved_password
 
 
 class Closed(ConnectionError):
@@ -119,11 +129,16 @@ class Client:
                 self._warned.add(problem)
                 log.warning("OBS %s %s: %s", kind, problem[1] or "", problem[2])
             return None
-        self._warned.clear()
+        # this request works again: warn again if it breaks later; other sources keep their silence
+        self._warned = {seen for seen in self._warned if seen[:2] != problem[:2]}
         return answer.get("responseData") or {}
 
     def connected(self):
         return self._ensure()
+
+    def endpoint(self):
+        """(host, port, password); ValueError when OBS_WEBSOCKET_URL is malformed."""
+        return self.where or address()
 
     def _exchange(self, kind, data):
         self._seq += 1
@@ -148,7 +163,11 @@ class Client:
             return True
         if self.clock() < self._next_try:
             return False
-        host, port, password = self.where or address()
+        try:
+            host, port, password = self.endpoint()
+        except ValueError as error:
+            self._drop(str(error))          # reported once; the other knobs and buttons go on
+            return False
         try:
             self._sock = self.connect((host, port), self.timeout)
             self._sock.settimeout(self.timeout)

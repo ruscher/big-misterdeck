@@ -59,7 +59,8 @@ action = "mute"
 action = "mute_microphone"
 
 # Exemplos para os botões 6 a 12:
-# [buttons.6]                 OBS: precisa do obs-cmd (yay -S obs-cmd)
+# OBS: precisa do obs-cmd (yay -S obs-cmd) e de OBS_WEBSOCKET_URL no serviço (veja o README)
+# [buttons.6]
 # action = "command"
 # run = ["obs-cmd", "recording", "toggle"]
 #
