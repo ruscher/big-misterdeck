@@ -1,0 +1,18 @@
+[Unit]
+Description=Big MisteRdeck - volume knobs and media buttons
+Documentation=https://github.com/ruscher/big-misterdeck
+# Volume and media need the user's PipeWire/PulseAudio and D-Bus session, not a
+# display: default.target starts it in every desktop, including window managers
+# (WindowMaker, Openbox) that never reach graphical-session.target.
+After=pipewire-pulse.service pulseaudio.service
+
+[Service]
+ExecStart=%h/.local/bin/big-misterdeck
+Restart=on-failure
+RestartSec=3
+# A bad config file must not restart in a loop: exit code 2 = configuration error.
+RestartPreventExitStatus=2
+Nice=5
+
+[Install]
+WantedBy=default.target

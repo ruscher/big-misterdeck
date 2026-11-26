@@ -1,0 +1,71 @@
+# Big MisteRdeck — configuração
+# Arquivo: ~/.config/big-misterdeck/config.toml  (depois de editar:
+#   systemctl --user restart big-misterdeck)
+#
+# Descubra os números que o seu deck manda com:  big-misterdeck --listen
+# O MisteRdeck original manda os botões como notas 1–12 e os potenciômetros
+# como controllers 16–19. Só o que você escrever aqui muda; o resto fica no
+# padrão. Para desligar um controle padrão: action = "none".
+
+[device]
+# Nome da porta MIDI (expressão regular, sem diferenciar maiúsculas)
+match = "MisteRdeck|Arduino Leonardo|Arduino Micro|Pro Micro"
+
+[behaviour]
+max_volume = 100   # % no fim do curso do potenciômetro (até 150)
+step = 5           # % dos botões volume_up / volume_down
+rate_hz = 25       # mudanças de volume por segundo, no máximo, por potenciômetro
+invert = false     # potenciômetros ligados ao contrário
+
+# ---- Potenciômetros ---------------------------------------------------------
+# action: volume | microphone | app_volume | none
+# app_volume: apps = nomes dos programas (expressão regular), ex. "spotify|vlc"
+
+[knobs.16]
+action = "volume"
+
+[knobs.17]
+action = "microphone"
+
+[knobs.18]
+action = "app_volume"
+apps = "spotify"
+
+[knobs.19]
+action = "app_volume"
+apps = "firefox|chrom|brave|vivaldi|opera"
+
+# ---- Botões -----------------------------------------------------------------
+# action: play_pause | next | previous | stop | mute | mute_microphone |
+#         volume_up | volume_down | command | none
+# command: run = ["programa", "argumento", ...]  (sem shell)
+
+[buttons.1]
+action = "play_pause"
+
+[buttons.2]
+action = "previous"
+
+[buttons.3]
+action = "next"
+
+[buttons.4]
+action = "mute"
+
+[buttons.5]
+action = "mute_microphone"
+
+# Exemplos para os botões 6 a 12:
+# [buttons.6]
+# action = "command"
+# run = ["obs", "--startstreaming"]
+#
+# [buttons.7]
+# action = "command"
+# run = ["xdg-open", "https://www.biglinux.com.br"]
+#
+# [buttons.8]
+# action = "volume_down"
+#
+# [buttons.9]
+# action = "volume_up"

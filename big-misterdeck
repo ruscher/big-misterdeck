@@ -1,0 +1,9 @@
+#!/bin/sh
+# Launcher: runs the package installed next to it (~/.local/share or /usr/share).
+for dir in "$(dirname "$(readlink -f "$0")")" "${XDG_DATA_HOME:-$HOME/.local/share}/big-misterdeck" /usr/share/big-misterdeck; do
+    if [ -d "$dir/bigmisterdeck" ]; then
+        PYTHONPATH="$dir${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m bigmisterdeck "$@"
+    fi
+done
+echo "big-misterdeck: package not found" >&2
+exit 1
